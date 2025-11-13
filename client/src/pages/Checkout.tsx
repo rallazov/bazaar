@@ -1,17 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Elements } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import OrderSummary from "@/components/OrderSummary";
+import StripeCheckoutForm from "@/components/StripeCheckoutForm";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
+import { useLocation } from "wouter";
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 export default function Checkout() {
-  const [currentStep, setCurrentStep] = useState<"shipping" | "payment" | "review">("shipping");
+  const [, setLocation] = useLocation();
+  const [currentStep, setCurrentStep] = useState<"shipping" | "payment" | "confirmation">("shipping");
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [shippingData, setShippingData] = useState({
     firstName: "",
     lastName: "",
@@ -22,23 +30,77 @@ export default function Checkout() {
     zip: "",
   });
 
+  const { data: cartItems = [] } = useQuery<any[]>({
+    queryKey: ["/api/cart"],
+  });
+
   const steps = [
     { id: "shipping", label: "Shipping" },
     { id: "payment", label: "Payment" },
-    { id: "review", label: "Review" },
+    { id: "confirmation", label: "Confirmation" },
   ];
 
-  const subtotal = 79.97;
-  const tax = 7.20;
+  const subtotal = cartItems.reduce((sum: number, item: any) => {
+    const price = item.product?.salePrice
+      ? parseFloat(item.product.salePrice)
+      : parseFloat(item.product?.price || "0");
+    return sum + price * item.quantity;
+  }, 0);
 
-  const handleShippingSubmit = (e: React.FormEvent) => {
+  const tax = subtotal * 0.09;
+
+  const handleShippingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCurrentStep("payment");
+
+    try {
+      const response = await fetch("/api/checkout/create-payment-intent", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      const data = await response.json();
+      setClientSecret(data.clientSecret);
+      setCurrentStep("payment");
+    } catch (error) {
+      console.error("Error creating payment intent:", error);
+    }
   };
+
+  const handlePaymentSuccess = (orderId: string) => {
+    setCurrentStep("confirmation");
+    setTimeout(() => {
+      setLocation("/");
+    }, 3000);
+  };
+
+  if (currentStep === "confirmation") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header cartItemCount={0} />
+        <main className="flex-1 py-12">
+          <div className="container mx-auto px-4 md:px-8 max-w-2xl text-center">
+            <div className="mb-8">
+              <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check className="h-8 w-8 text-primary-foreground" />
+              </div>
+              <h1 className="text-3xl font-bold mb-2">Order Confirmed!</h1>
+              <p className="text-muted-foreground">
+                Thank you for your purchase. You'll receive a confirmation email shortly.
+              </p>
+            </div>
+            <Button onClick={() => setLocation("/")} data-testid="button-continue-shopping">
+              Continue Shopping
+            </Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header cartItemCount={3} />
+      <Header cartItemCount={cartItems.length} />
       <main className="flex-1 py-8 md:py-12">
         <div className="container mx-auto px-4 md:px-8 max-w-6xl">
           <div className="mb-8">
@@ -188,69 +250,28 @@ export default function Checkout() {
                 </Card>
               )}
 
-              {currentStep === "payment" && (
+              {currentStep === "payment" && clientSecret && (
                 <Card className="p-6">
                   <h2 className="text-2xl font-bold mb-6" data-testid="text-payment-title">
                     Payment Information
                   </h2>
-                  <div className="space-y-6">
-                    <div className="p-6 border-2 border-dashed rounded-md text-center">
-                      <p className="text-muted-foreground mb-2">
-                        Stripe integration will be added here
-                      </p>
-                      <Badge variant="outline">Coming Soon</Badge>
-                    </div>
-                    <div className="flex gap-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => setCurrentStep("shipping")}
-                        className="flex-1"
-                        data-testid="button-back-shipping"
-                      >
-                        Back
-                      </Button>
-                      <Button
-                        onClick={() => setCurrentStep("review")}
-                        className="flex-1"
-                        data-testid="button-continue-review"
-                      >
-                        Continue to Review
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              )}
-
-              {currentStep === "review" && (
-                <Card className="p-6">
-                  <h2 className="text-2xl font-bold mb-6" data-testid="text-review-title">
-                    Review Order
-                  </h2>
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="font-semibold mb-2">Shipping Address</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {shippingData.firstName} {shippingData.lastName}
-                        <br />
-                        {shippingData.address}
-                        <br />
-                        {shippingData.city}, {shippingData.state} {shippingData.zip}
-                      </p>
-                    </div>
-                    <Separator />
-                    <div className="flex gap-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => setCurrentStep("payment")}
-                        className="flex-1"
-                        data-testid="button-back-payment"
-                      >
-                        Back
-                      </Button>
-                      <Button className="flex-1" size="lg" data-testid="button-place-order">
-                        Place Order
-                      </Button>
-                    </div>
+                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                    <StripeCheckoutForm
+                      onSuccess={handlePaymentSuccess}
+                      customerEmail={shippingData.email}
+                      customerName={`${shippingData.firstName} ${shippingData.lastName}`}
+                      shippingAddress={shippingData}
+                    />
+                  </Elements>
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentStep("shipping")}
+                      className="w-full"
+                      data-testid="button-back-shipping"
+                    >
+                      Back to Shipping
+                    </Button>
                   </div>
                 </Card>
               )}
@@ -261,7 +282,7 @@ export default function Checkout() {
                 <OrderSummary
                   subtotal={subtotal}
                   tax={tax}
-                  checkoutLabel="Review Order"
+                  checkoutLabel={currentStep === "shipping" ? "Review Order" : "Processing..."}
                 />
               </div>
             </div>

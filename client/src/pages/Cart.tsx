@@ -1,51 +1,74 @@
-import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CartItem, { CartItemData } from "@/components/CartItem";
 import OrderSummary from "@/components/OrderSummary";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
-import blackProduct from "@assets/generated_images/Black_boxer_briefs_product_cd1031ec.png";
-import redProduct from "@assets/generated_images/Red_boxer_briefs_product_f7f95c72.png";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+
+interface CartItemWithProduct extends CartItemData {
+  product: {
+    id: string;
+    name: string;
+    price: string;
+    salePrice: string | null;
+    imageUrl: string;
+  };
+}
 
 export default function Cart() {
   const { toast } = useToast();
-  const [cartItems, setCartItems] = useState<CartItemData[]>([
-    {
-      id: "1",
-      name: "Classic Black Boxer Brief",
-      price: 24.99,
-      size: "L",
-      color: "Black",
-      quantity: 2,
-      image: blackProduct,
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  const { data: cartItemsData = [], isLoading } = useQuery<CartItemWithProduct[]>({
+    queryKey: ["/api/cart"],
+  });
+
+  const updateQuantityMutation = useMutation({
+    mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
+      return apiRequest("PATCH", `/api/cart/${id}`, { quantity });
     },
-    {
-      id: "2",
-      name: "Bold Red Boxer Brief",
-      price: 29.99,
-      size: "M",
-      color: "Red",
-      quantity: 1,
-      image: redProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
     },
-  ]);
+  });
+
+  const removeItemMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/cart/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      toast({
+        title: "Item removed",
+        description: "Item has been removed from your cart.",
+      });
+    },
+  });
 
   const handleUpdateQuantity = (id: string, quantity: number) => {
-    setCartItems((items) =>
-      items.map((item) => (item.id === id ? { ...item, quantity } : item))
-    );
+    updateQuantityMutation.mutate({ id, quantity });
   };
 
   const handleRemove = (id: string) => {
-    setCartItems((items) => items.filter((item) => item.id !== id));
-    toast({
-      title: "Item removed",
-      description: "Item has been removed from your cart.",
-    });
+    removeItemMutation.mutate(id);
   };
+
+  const cartItems: CartItemData[] = cartItemsData.map((item) => ({
+    id: item.id,
+    name: item.product.name,
+    price: item.product.salePrice
+      ? parseFloat(item.product.salePrice)
+      : parseFloat(item.product.price),
+    size: item.size,
+    color: item.color,
+    quantity: item.quantity,
+    image: item.product.imageUrl,
+  }));
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const tax = subtotal * 0.09;
@@ -64,7 +87,11 @@ export default function Cart() {
             </Link>
           </div>
 
-          {cartItems.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-16">
+              <p className="text-muted-foreground">Loading cart...</p>
+            </div>
+          ) : cartItems.length === 0 ? (
             <div className="text-center py-16">
               <h2 className="text-2xl font-bold mb-4" data-testid="text-empty-cart-title">
                 Your cart is empty
@@ -97,9 +124,7 @@ export default function Cart() {
                   <OrderSummary
                     subtotal={subtotal}
                     tax={tax}
-                    onCheckout={() => {
-                      window.location.href = "/checkout";
-                    }}
+                    onCheckout={() => setLocation("/checkout")}
                   />
                 </div>
               </div>
