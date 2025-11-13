@@ -110,7 +110,7 @@ export class MemStorage implements IStorage {
 
     if (existingItem) {
       // Update quantity instead of creating new item
-      existingItem.quantity += insertItem.quantity;
+      existingItem.quantity += (insertItem.quantity ?? 1);
       this.cartItems.set(existingItem.id, existingItem);
       return existingItem;
     }
@@ -122,7 +122,7 @@ export class MemStorage implements IStorage {
       productId: insertItem.productId,
       size: insertItem.size,
       color: insertItem.color,
-      quantity: insertItem.quantity,
+      quantity: insertItem.quantity ?? 1,
       createdAt: new Date(),
     };
     this.cartItems.set(id, cartItem);
@@ -160,7 +160,7 @@ export class MemStorage implements IStorage {
       customerName: insertOrder.customerName,
       shippingAddress: insertOrder.shippingAddress,
       total: insertOrder.total,
-      status: insertOrder.status,
+      status: insertOrder.status ?? "pending",
       stripePaymentIntentId: insertOrder.stripePaymentIntentId ?? null,
       createdAt: new Date(),
     };
