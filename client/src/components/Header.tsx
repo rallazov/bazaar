@@ -24,7 +24,7 @@ export default function Header({ cartItemCount = 0 }: HeaderProps) {
         <div className="flex h-16 items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-xl md:text-2xl font-bold text-foreground" data-testid="text-logo">
-              LUXE<span className="text-primary">BRIEF</span>
+              ZEPHYR <span className="text-primary">LUX</span>
             </span>
           </Link>
 

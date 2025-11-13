@@ -26,7 +26,7 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
           <div className="col-span-2 md:col-span-1">
             <h3 className="text-xl font-bold mb-4">
-              LUXE<span className="text-primary">BRIEF</span>
+              ZEPHYR <span className="text-primary">LUX</span>
             </h3>
             <p className="text-sm text-muted-foreground mb-4">
               Premium comfort and bold style for the modern man.
@@ -103,7 +103,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t pt-8 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} LuxeBrief. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} ZEPHYR LUX. All rights reserved.</p>
         </div>
       </div>
     </footer>
