@@ -4,7 +4,21 @@ import { storage } from "./storage";
 import { insertProductSchema, insertCartItemSchema, insertOrderSchema } from "@shared/schema";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+let stripe: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!stripe) {
+    const apiKey = process.env.STRIPE_SECRET_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "STRIPE_SECRET_KEY environment variable is not set. " +
+        "Please set it to enable Stripe functionality."
+      );
+    }
+    stripe = new Stripe(apiKey);
+  }
+  return stripe;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Product routes
@@ -36,7 +50,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const sessionId = req.session.id;
       const cartItems = await storage.getCartItems(sessionId);
-      
+
       // Enrich cart items with product data
       const enrichedItems = await Promise.all(
         cartItems.map(async (item) => {
@@ -130,9 +144,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const item of cartItems) {
         const product = await storage.getProduct(item.productId);
         if (!product) continue;
-        
-        const price = product.salePrice 
-          ? parseFloat(product.salePrice) 
+
+        const price = product.salePrice
+          ? parseFloat(product.salePrice)
           : parseFloat(product.price);
         total += price * item.quantity;
       }
@@ -142,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finalTotal = Math.round((total + tax) * 100); // Convert to cents
 
       // Create Stripe payment intent
-      const paymentIntent = await stripe.paymentIntents.create({
+      const paymentIntent = await getStripe().paymentIntents.create({
         amount: finalTotal,
         currency: "usd",
         automatic_payment_methods: {
@@ -169,8 +183,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionId = req.session.id;
 
       // Verify payment intent
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-      
+      const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+
       if (paymentIntent.status !== "succeeded") {
         return res.status(400).json({ error: "Payment not completed" });
       }
@@ -178,13 +192,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get cart items to calculate total
       const cartItems = await storage.getCartItems(sessionId);
       let subtotal = 0;
-      
+
       for (const item of cartItems) {
         const product = await storage.getProduct(item.productId);
         if (!product) continue;
-        
-        const price = product.salePrice 
-          ? parseFloat(product.salePrice) 
+
+        const price = product.salePrice
+          ? parseFloat(product.salePrice)
           : parseFloat(product.price);
         subtotal += price * item.quantity;
       }
