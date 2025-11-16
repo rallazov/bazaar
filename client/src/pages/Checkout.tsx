@@ -15,6 +15,7 @@ import { Check } from "lucide-react";
 import { useLocation } from "wouter";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+const useFakePayments = import.meta.env.VITE_USE_FAKE_PAYMENTS === 'true';
 
 export default function Checkout() {
   const [, setLocation] = useLocation();
@@ -109,13 +110,12 @@ export default function Checkout() {
                 <div key={step.id} className="flex items-center gap-2">
                   <div className="flex items-center gap-2">
                     <div
-                      className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                        currentStep === step.id
+                      className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${currentStep === step.id
                           ? "border-primary bg-primary text-primary-foreground"
                           : steps.findIndex((s) => s.id === currentStep) > idx
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border"
-                      }`}
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border"
+                        }`}
                       data-testid={`step-${step.id}`}
                     >
                       {steps.findIndex((s) => s.id === currentStep) > idx ? (
@@ -125,11 +125,10 @@ export default function Checkout() {
                       )}
                     </div>
                     <span
-                      className={`hidden md:inline text-sm font-medium ${
-                        currentStep === step.id
+                      className={`hidden md:inline text-sm font-medium ${currentStep === step.id
                           ? "text-foreground"
                           : "text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       {step.label}
                     </span>
@@ -255,24 +254,70 @@ export default function Checkout() {
                   <h2 className="text-2xl font-bold mb-6" data-testid="text-payment-title">
                     Payment Information
                   </h2>
-                  <Elements stripe={stripePromise} options={{ clientSecret }}>
-                    <StripeCheckoutForm
-                      onSuccess={handlePaymentSuccess}
-                      customerEmail={shippingData.email}
-                      customerName={`${shippingData.firstName} ${shippingData.lastName}`}
-                      shippingAddress={shippingData}
-                    />
-                  </Elements>
-                  <div className="mt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentStep("shipping")}
-                      className="w-full"
-                      data-testid="button-back-shipping"
-                    >
-                      Back to Shipping
-                    </Button>
-                  </div>
+                  {useFakePayments ? (
+                    <div>
+                      <p className="mb-4 text-muted-foreground">Fake payments mode is enabled for local testing.</p>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            const resp = await fetch('/api/checkout/confirm', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              credentials: 'include',
+                              body: JSON.stringify({
+                                paymentIntentId: 'fake_pi_dev',
+                                customerEmail: shippingData.email,
+                                customerName: `${shippingData.firstName} ${shippingData.lastName}`,
+                                shippingAddress: shippingData,
+                              }),
+                            });
+
+                            const data = await resp.json();
+                            if (resp.ok) {
+                              handlePaymentSuccess(data.order.id);
+                            } else {
+                              console.error('Fake payment failed', data);
+                            }
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }}
+                        className="w-full"
+                      >
+                        Simulate Payment
+                      </Button>
+                      <div className="mt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCurrentStep('shipping')}
+                          className="w-full"
+                        >
+                          Back to Shipping
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Elements stripe={stripePromise} options={{ clientSecret }}>
+                        <StripeCheckoutForm
+                          onSuccess={handlePaymentSuccess}
+                          customerEmail={shippingData.email}
+                          customerName={`${shippingData.firstName} ${shippingData.lastName}`}
+                          shippingAddress={shippingData}
+                        />
+                      </Elements>
+                      <div className="mt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCurrentStep('shipping')}
+                          className="w-full"
+                          data-testid="button-back-shipping"
+                        >
+                          Back to Shipping
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </Card>
               )}
             </div>

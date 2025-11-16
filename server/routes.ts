@@ -12,7 +12,7 @@ function getStripe(): Stripe {
     if (!apiKey) {
       throw new Error(
         "STRIPE_SECRET_KEY environment variable is not set. " +
-        "Please set it to enable Stripe functionality."
+        "Please set it to enable Stripe functionality or enable USE_FAKE_PAYMENTS for local testing."
       );
     }
     stripe = new Stripe(apiKey);
@@ -155,6 +155,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tax = total * 0.09;
       const finalTotal = Math.round((total + tax) * 100); // Convert to cents
 
+      // Support a local dev fallback (no Stripe) when USE_FAKE_PAYMENTS=true
+      if (process.env.USE_FAKE_PAYMENTS === "true") {
+        // return a fake client secret and the amount. The frontend can proceed to a mock payment UI.
+        const fakeClientSecret = `fake_client_secret_${sessionId}_${Date.now()}`;
+        return res.json({ clientSecret: fakeClientSecret, amount: finalTotal });
+      }
+
       // Create Stripe payment intent
       const paymentIntent = await getStripe().paymentIntents.create({
         amount: finalTotal,
@@ -183,10 +190,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionId = req.session.id;
 
       // Verify payment intent
-      const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
-
-      if (paymentIntent.status !== "succeeded") {
-        return res.status(400).json({ error: "Payment not completed" });
+      if (process.env.USE_FAKE_PAYMENTS === "true") {
+        // In dev mode with fake payments we assume the payment succeeded
+      } else {
+        const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+        if (paymentIntent.status !== "succeeded") {
+          return res.status(400).json({ error: "Payment not completed" });
+        }
       }
 
       // Get cart items to calculate total
